@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lista de presença - Arnaldinho B-Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Lista de Presença &mdash; Arnaldinho B-Day</h1>
+  <span class="sair" id="btn-sair">Sair</span>
+</header>
+
+<main class="app-main wide">
+  <div class="card" id="card-negado" style="display:none;">
+    <h2>Acesso restrito</h2>
+    <p>Esta área é exclusiva para o Arnaldo. Se deveria ter acesso, verifique a coleção <code>admins</code> no Firestore.</p>
+  </div>
+
+  <div id="conteudo" style="display:none;">
+    <div class="resumo-admin" id="resumoLista">
+      <div class="resumo-item"><span class="resumo-num" id="resumoConfirmacoes">0</span><span class="resumo-label">Confirmações</span></div>
+      <div class="resumo-item"><span class="resumo-num" id="resumoPessoas">0</span><span class="resumo-label">Pessoas no total</span></div>
+      <div class="resumo-item"><span class="resumo-num" id="resumoPago">R$ 0</span><span class="resumo-label">Já pago</span></div>
+      <div class="resumo-item"><span class="resumo-num" id="resumoPendente">R$ 0</span><span class="resumo-label">Pendente</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header-row">
+        <h2>Confirmações</h2>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="admin-table" id="tabela-confirmacoes">
+          <thead>
+            <tr><th>Convidado</th><th>Acompanhantes</th><th>Pessoas</th><th>Valor</th><th>Status</th><th>Confirmado em</th></tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="6">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script>
+const btnSair = document.getElementById("btn-sair");
+const cardNegado = document.getElementById("card-negado");
+const conteudo = document.getElementById("conteudo");
+const tabelaConfirmacoes = document.querySelector("#tabela-confirmacoes tbody");
+const resumoConfirmacoes = document.getElementById("resumoConfirmacoes");
+const resumoPessoas = document.getElementById("resumoPessoas");
+const resumoPago = document.getElementById("resumoPago");
+const resumoPendente = document.getElementById("resumoPendente");
+
+btnSair.addEventListener("click", () => auth.signOut().then(() => window.location.href = "login.html"));
+
+auth.onAuthStateChanged(async (user) => {
+  if (!user) {
+    window.location.href = "login.html";
+    return;
+  }
+
+  const adminDoc = await db.collection("admins").doc(user.uid).get();
+  if (!adminDoc.exists) {
+    cardNegado.style.display = "block";
+    return;
+  }
+
+  conteudo.style.display = "block";
+  iniciarLista();
+});
+
+function formatarValor(v) {
+  return "R$ " + (v || 0).toFixed(2).replace(".", ",");
+}
+
+function formatarDataHora(iso) {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString("pt-BR");
+}
+
+const STATUS_LABEL = { pendente: "Pendente", pago: "Pago" };
+
+function iniciarLista() {
+  db.collection("confirmacoes").orderBy("criadoEm", "desc").onSnapshot((snap) => {
+    if (snap.empty) {
+      tabelaConfirmacoes.innerHTML = "<tr><td colspan='6'>Ninguém confirmou ainda.</td></tr>";
+      atualizarResumo([]);
+      return;
+    }
+
+    tabelaConfirmacoes.innerHTML = "";
+    const confirmacoes = [];
+
+    // Nomes vêm de um formulário público sem cadastro (conteúdo livre) —
+    // nunca usar innerHTML com esses dados, sempre createElement/textContent.
+    snap.forEach((doc) => {
+      const c = doc.data();
+      confirmacoes.push(c);
+      const tr = document.createElement("tr");
+
+      const tdNome = document.createElement("td");
+      tdNome.textContent = c.nomeConvidado;
+
+      const tdAcompanhantes = document.createElement("td");
+      tdAcompanhantes.className = "acompanhantes-lista";
+      if (!c.acompanhantes || c.acompanhantes.length === 0) {
+        tdAcompanhantes.textContent = "-";
+      } else {
+        c.acompanhantes.forEach((a, i) => {
+          if (i > 0) tdAcompanhantes.appendChild(document.createElement("br"));
+          const span = document.createElement("span");
+          span.textContent = a.nome + (a.crianca ? " " : "");
+          tdAcompanhantes.appendChild(span);
+          if (a.crianca) {
+            const tag = document.createElement("span");
+            tag.className = "crianca-tag";
+            tag.textContent = "(criança)";
+            tdAcompanhantes.appendChild(tag);
+          }
+        });
+      }
+
+      const tdPessoas = document.createElement("td");
+      tdPessoas.textContent = 1 + (c.acompanhantes ? c.acompanhantes.length : 0);
+
+      const tdValor = document.createElement("td");
+      tdValor.textContent = formatarValor(c.valorTotal);
+
+      const tdStatus = document.createElement("td");
+      const statusTag = document.createElement("span");
+      statusTag.className = "status-tag " + c.status;
+      statusTag.textContent = STATUS_LABEL[c.status] || c.status;
+      tdStatus.appendChild(statusTag);
+
+      const tdCriado = document.createElement("td");
+      tdCriado.textContent = c.criadoEm ? formatarDataHora(c.criadoEm.toDate()) : "-";
+
+      tr.append(tdNome, tdAcompanhantes, tdPessoas, tdValor, tdStatus, tdCriado);
+      tabelaConfirmacoes.appendChild(tr);
+    });
+
+    atualizarResumo(confirmacoes);
+  });
+}
+
+function atualizarResumo(confirmacoes) {
+  let totalPessoas = 0;
+  let totalPago = 0;
+  let totalPendente = 0;
+
+  confirmacoes.forEach((c) => {
+    totalPessoas += 1 + (c.acompanhantes ? c.acompanhantes.length : 0);
+    if (c.status === "pago") totalPago += c.valorTotal || 0;
+    else totalPendente += c.valorTotal || 0;
+  });
+
+  resumoConfirmacoes.textContent = confirmacoes.length;
+  resumoPessoas.textContent = totalPessoas;
+  resumoPago.textContent = formatarValor(totalPago);
+  resumoPendente.textContent = formatarValor(totalPendente);
+}
+</script>
+</body>
+</html>

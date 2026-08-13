@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confirmar presença — Arnaldinho B-Day</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎉</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">ARNALDINHO <b>B-DAY</b></a>
+  </div>
+</header>
+
+<main>
+  <section class="form-section">
+    <div class="form-card">
+      <h1>Confirmar presença</h1>
+      <p class="sub">Preencha seus dados e de quem for com você. Depois é só fazer o Pix da contribuição.</p>
+
+      <form id="form-confirmar">
+        <p class="form-section-title">Seus dados</p>
+        <label for="nomeConvidado">Seu nome completo</label>
+        <input type="text" id="nomeConvidado" placeholder="Nome e sobrenome" required>
+
+        <p class="form-section-title">Acompanhantes (opcional, até 5)</p>
+        <div id="acompanhantes"></div>
+
+        <div class="resumo-valor">
+          <span class="label">Total a pagar</span>
+          <span class="valor" id="valorTotal">R$ 15,00</span>
+        </div>
+        <p class="sub" style="margin-top:.6rem; font-size:.78rem;">R$ 15,00 por pessoa &middot; crianças até 10 anos não pagam.</p>
+
+        <button type="submit" class="btn btn-primary btn-full" id="btn-confirmar">Confirmar e gerar Pix</button>
+        <div class="msg" id="msg"></div>
+      </form>
+
+      <div class="pagamento-box" id="pagamentoBox" style="display:none;">
+        <h3>Pagamento</h3>
+        <div id="pagamentoConteudo"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="app/firebase-init.js"></script>
+<script>
+const WORKER_URL = "https://arnaldinho-bday.academiaplus.workers.dev";
+const PRECO_PESSOA = 15;
+const MAX_ACOMPANHANTES = 5;
+
+const acompanhantesDiv = document.getElementById("acompanhantes");
+const valorTotalEl = document.getElementById("valorTotal");
+const form = document.getElementById("form-confirmar");
+const btnConfirmar = document.getElementById("btn-confirmar");
+const msg = document.getElementById("msg");
+const pagamentoBox = document.getElementById("pagamentoBox");
+const pagamentoConteudo = document.getElementById("pagamentoConteudo");
+
+function showMsg(text, type) {
+  msg.textContent = text;
+  msg.className = "msg show " + type;
+}
+
+// Monta as 5 linhas de acompanhante: nome (opcional) + checkbox de criança.
+for (let i = 1; i <= MAX_ACOMPANHANTES; i++) {
+  const row = document.createElement("div");
+  row.className = "acompanhante-row";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Nome do acompanhante " + i + " (opcional)";
+  input.id = "acomp-nome-" + i;
+  input.addEventListener("input", atualizarValor);
+
+  const checkLabel = document.createElement("label");
+  checkLabel.className = "acompanhante-check";
+  const check = document.createElement("input");
+  check.type = "checkbox";
+  check.id = "acomp-crianca-" + i;
+  check.addEventListener("change", atualizarValor);
+  checkLabel.append(check, document.createTextNode("Criança até 10 anos"));
+
+  row.append(input, checkLabel);
+  acompanhantesDiv.appendChild(row);
+}
+
+function coletarAcompanhantes() {
+  const lista = [];
+  for (let i = 1; i <= MAX_ACOMPANHANTES; i++) {
+    const nome = document.getElementById("acomp-nome-" + i).value.trim();
+    if (!nome) continue;
+    const crianca = document.getElementById("acomp-crianca-" + i).checked;
+    lista.push({ nome, crianca });
+  }
+  return lista;
+}
+
+function calcularValor(acompanhantes) {
+  const pagantes = 1 + acompanhantes.filter((a) => !a.crianca).length; // o convidado principal sempre paga
+  return pagantes * PRECO_PESSOA;
+}
+
+function atualizarValor() {
+  const valor = calcularValor(coletarAcompanhantes());
+  valorTotalEl.textContent = "R$ " + valor.toFixed(2).replace(".", ",");
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const nomeConvidado = document.getElementById("nomeConvidado").value.trim();
+  if (!nomeConvidado) {
+    showMsg("Preencha seu nome completo.", "error");
+    return;
+  }
+
+  const acompanhantes = coletarAcompanhantes();
+  const valorTotal = calcularValor(acompanhantes);
+
+  btnConfirmar.disabled = true;
+  btnConfirmar.textContent = "Confirmando...";
+
+  const confirmacaoRef = db.collection("confirmacoes").doc();
+
+  try {
+    await confirmacaoRef.set({
+      nomeConvidado,
+      acompanhantes,
+      valorTotal,
+      status: "pendente",
+      criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err) {
+    showMsg("Não foi possível confirmar. Tente novamente.", "error");
+    btnConfirmar.disabled = false;
+    btnConfirmar.textContent = "Confirmar e gerar Pix";
+    return;
+  }
+
+  form.querySelectorAll("input, button").forEach((el) => (el.disabled = true));
+  showMsg("Presença confirmada! Gerando o Pix...", "info");
+
+  await gerarEAcompanharPix(confirmacaoRef, valorTotal, nomeConvidado);
+});
+
+async function gerarEAcompanharPix(confirmacaoRef, valorTotal, nomeConvidado) {
+  pagamentoBox.style.display = "block";
+  pagamentoConteudo.innerHTML = "";
+
+  let resposta;
+  try {
+    const r = await fetch(WORKER_URL + "/criar-pix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        confirmacaoId: confirmacaoRef.id,
+        valor: valorTotal,
+        descricao: "Aniversário Arnaldo - " + nomeConvidado
+      })
+    });
+    resposta = await r.json();
+
+    if (r.status === 501) {
+      const p = document.createElement("p");
+      p.textContent = "Sua presença já está confirmada! O pagamento automático via Pix ainda está sendo configurado — combine o pagamento direto com o Arnaldo.";
+      pagamentoConteudo.appendChild(p);
+      msg.className = "msg";
+      return;
+    }
+
+    if (!r.ok || !resposta.ok) throw new Error(resposta.erro || "Falha ao gerar Pix.");
+  } catch (err) {
+    const p = document.createElement("p");
+    p.textContent = "Sua presença já está confirmada! Não foi possível gerar o Pix agora — tente novamente em instantes ou combine o pagamento direto com o Arnaldo.";
+    pagamentoConteudo.appendChild(p);
+    return;
+  }
+
+  const img = document.createElement("img");
+  img.src = "data:image/png;base64," + resposta.pixQrCodeBase64;
+  img.alt = "QR Code Pix";
+  img.className = "qr-code";
+
+  const label = document.createElement("p");
+  label.textContent = "Escaneie o QR Code ou copie o código Pix abaixo:";
+
+  const codigoBox = document.createElement("div");
+  codigoBox.className = "pix-codigo";
+  const codigoTexto = document.createElement("code");
+  codigoTexto.textContent = resposta.pixCopiaECola;
+  const btnCopiar = document.createElement("button");
+  btnCopiar.type = "button";
+  btnCopiar.className = "btn btn-ghost";
+  btnCopiar.textContent = "Copiar código";
+  btnCopiar.addEventListener("click", () => {
+    navigator.clipboard.writeText(resposta.pixCopiaECola);
+    btnCopiar.textContent = "Copiado!";
+    setTimeout(() => (btnCopiar.textContent = "Copiar código"), 2000);
+  });
+  codigoBox.append(codigoTexto, btnCopiar);
+
+  pagamentoConteudo.append(img, label, codigoBox);
+
+  confirmacaoRef.onSnapshot((doc) => {
+    if (doc.exists && doc.data().status === "pago") {
+      pagamentoConteudo.innerHTML = "";
+      const ok = document.createElement("p");
+      ok.className = "pago-ok";
+      ok.textContent = "Pagamento confirmado! Nos vemos na festa. 🎉";
+      pagamentoConteudo.appendChild(ok);
+    }
+  });
+}
+</script>
+</body>
+</html>

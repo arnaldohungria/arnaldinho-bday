@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && request.auth.uid == adminId;
+      allow write: if false; // só é possível adicionar pelo Console do Firebase
+    }
+
+    // Confirmação de presença — preenchida pelo convidado, sem cadastro/login.
+    // Documento só é acessível por get() (link direto, ID sabido pelo convidado
+    // logo após criar) — nunca por list(), então ninguém consegue varrer os
+    // nomes de outros convidados. Só o Worker (service account, bypassa as
+    // rules) marca como pago depois que o Mercado Pago confirma.
+    function confirmacaoValida(dados) {
+      return dados.nomeConvidado is string && dados.nomeConvidado.size() > 0 && dados.nomeConvidado.size() < 100
+        && dados.acompanhantes is list && dados.acompanhantes.size() <= 5
+        && dados.valorTotal is number && dados.valorTotal >= 0 && dados.valorTotal <= 90
+        && dados.status == 'pendente'
+        && dados.criadoEm == request.time
+        && dados.keys().hasOnly(['nomeConvidado', 'acompanhantes', 'valorTotal', 'status', 'criadoEm']);
+    }
+
+    match /confirmacoes/{confirmacaoId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if confirmacaoValida(request.resource.data);
+      allow update, delete: if false;
+    }
+  }
+}
