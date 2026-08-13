@@ -22,7 +22,7 @@
   <section class="form-section">
     <div class="form-card">
       <h1>Confirmar presença</h1>
-      <p class="sub">Preencha seus dados e de quem for com você. Depois é só fazer o Pix da contribuição.</p>
+      <p class="sub">Preencha seus dados e de quem for com você. Nenhum pagamento é necessário pra confirmar.</p>
 
       <form id="form-confirmar">
         <p class="form-section-title">Seus dados</p>
@@ -32,18 +32,23 @@
         <p class="form-section-title">Acompanhantes (opcional, até 5)</p>
         <div id="acompanhantes"></div>
 
-        <div class="resumo-valor">
-          <span class="label">Total a pagar</span>
-          <span class="valor" id="valorTotal">R$ 15,00</span>
-        </div>
-        <p class="sub" style="margin-top:.6rem; font-size:.78rem;">R$ 15,00 por pessoa &middot; crianças até 10 anos não pagam.</p>
-
-        <button type="submit" class="btn btn-primary btn-full" id="btn-confirmar">Confirmar e gerar Pix</button>
+        <button type="submit" class="btn btn-primary btn-full" id="btn-confirmar">Confirmar presença</button>
         <div class="msg" id="msg"></div>
       </form>
 
-      <div class="pagamento-box" id="pagamentoBox" style="display:none;">
-        <h3>Pagamento</h3>
+      <div class="pagamento-box" id="sucessoBox" style="display:none;">
+        <h3>Presença confirmada! 🎉</h3>
+        <p style="text-align:center;">Já te esperamos no dia 19! Nos vemos lá.</p>
+      </div>
+
+      <div class="pagamento-box contribuicao-box" id="contribuicaoBox" style="display:none;">
+        <p class="form-section-title" style="margin-top:0; padding-top:0; border-top:none;">Quer ajudar com a janta? (opcional)</p>
+        <p class="sub">A festa tem um custo com o Strogonoff, e qualquer ajuda é bem-vinda — mas isso é só se você quiser, viu? Não é obrigatório de jeito nenhum. Contribuição sugerida: <b>R$ 15,00 por pessoa</b> (crianças até 10 anos não contam).</p>
+        <div class="resumo-valor">
+          <span class="label">Contribuição sugerida</span>
+          <span class="valor" id="valorTotal">R$ 15,00</span>
+        </div>
+        <button type="button" class="btn btn-primary btn-full" id="btn-contribuir">Quero contribuir</button>
         <div id="pagamentoConteudo"></div>
       </div>
     </div>
@@ -64,7 +69,9 @@ const valorTotalEl = document.getElementById("valorTotal");
 const form = document.getElementById("form-confirmar");
 const btnConfirmar = document.getElementById("btn-confirmar");
 const msg = document.getElementById("msg");
-const pagamentoBox = document.getElementById("pagamentoBox");
+const sucessoBox = document.getElementById("sucessoBox");
+const contribuicaoBox = document.getElementById("contribuicaoBox");
+const btnContribuir = document.getElementById("btn-contribuir");
 const pagamentoConteudo = document.getElementById("pagamentoConteudo");
 
 function showMsg(text, type) {
@@ -81,14 +88,12 @@ for (let i = 1; i <= MAX_ACOMPANHANTES; i++) {
   input.type = "text";
   input.placeholder = "Nome do acompanhante " + i + " (opcional)";
   input.id = "acomp-nome-" + i;
-  input.addEventListener("input", atualizarValor);
 
   const checkLabel = document.createElement("label");
   checkLabel.className = "acompanhante-check";
   const check = document.createElement("input");
   check.type = "checkbox";
   check.id = "acomp-crianca-" + i;
-  check.addEventListener("change", atualizarValor);
   checkLabel.append(check, document.createTextNode("Criança até 10 anos"));
 
   row.append(input, checkLabel);
@@ -107,14 +112,13 @@ function coletarAcompanhantes() {
 }
 
 function calcularValor(acompanhantes) {
-  const pagantes = 1 + acompanhantes.filter((a) => !a.crianca).length; // o convidado principal sempre paga
+  const pagantes = 1 + acompanhantes.filter((a) => !a.crianca).length; // o convidado principal sempre "conta", mesmo que não contribua
   return pagantes * PRECO_PESSOA;
 }
 
-function atualizarValor() {
-  const valor = calcularValor(coletarAcompanhantes());
-  valorTotalEl.textContent = "R$ " + valor.toFixed(2).replace(".", ",");
-}
+let confirmacaoAtual = null;
+let valorAtual = 0;
+let nomeAtual = "";
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -144,18 +148,28 @@ form.addEventListener("submit", async (e) => {
   } catch (err) {
     showMsg("Não foi possível confirmar. Tente novamente.", "error");
     btnConfirmar.disabled = false;
-    btnConfirmar.textContent = "Confirmar e gerar Pix";
+    btnConfirmar.textContent = "Confirmar presença";
     return;
   }
 
-  form.querySelectorAll("input, button").forEach((el) => (el.disabled = true));
-  showMsg("Presença confirmada! Gerando o Pix...", "info");
+  confirmacaoAtual = confirmacaoRef;
+  valorAtual = valorTotal;
+  nomeAtual = nomeConvidado;
 
-  await gerarEAcompanharPix(confirmacaoRef, valorTotal, nomeConvidado);
+  form.style.display = "none";
+  sucessoBox.style.display = "block";
+  contribuicaoBox.style.display = "block";
+  valorTotalEl.textContent = "R$ " + valorTotal.toFixed(2).replace(".", ",");
+});
+
+btnContribuir.addEventListener("click", async () => {
+  btnContribuir.disabled = true;
+  btnContribuir.textContent = "Gerando...";
+  await gerarEAcompanharPix(confirmacaoAtual, valorAtual, nomeAtual);
 });
 
 async function gerarEAcompanharPix(confirmacaoRef, valorTotal, nomeConvidado) {
-  pagamentoBox.style.display = "block";
+  btnContribuir.style.display = "none";
   pagamentoConteudo.innerHTML = "";
 
   let resposta;
@@ -173,17 +187,19 @@ async function gerarEAcompanharPix(confirmacaoRef, valorTotal, nomeConvidado) {
 
     if (r.status === 501) {
       const p = document.createElement("p");
-      p.textContent = "Sua presença já está confirmada! O pagamento automático via Pix ainda está sendo configurado — combine o pagamento direto com o Arnaldo.";
+      p.textContent = "O Pix automático ainda está sendo configurado — se quiser contribuir, combine direto com o Arnaldo.";
       pagamentoConteudo.appendChild(p);
-      msg.className = "msg";
       return;
     }
 
     if (!r.ok || !resposta.ok) throw new Error(resposta.erro || "Falha ao gerar Pix.");
   } catch (err) {
     const p = document.createElement("p");
-    p.textContent = "Sua presença já está confirmada! Não foi possível gerar o Pix agora — tente novamente em instantes ou combine o pagamento direto com o Arnaldo.";
+    p.textContent = "Não foi possível gerar o Pix agora. Tente novamente em instantes.";
     pagamentoConteudo.appendChild(p);
+    btnContribuir.style.display = "block";
+    btnContribuir.disabled = false;
+    btnContribuir.textContent = "Quero contribuir";
     return;
   }
 
