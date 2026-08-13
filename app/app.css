@@ -109,3 +109,9 @@ table.admin-table tr:hover td{background:rgba(212,175,55,0.05);}
 
 .acompanhantes-lista{font-size:.82rem; color:var(--text-dim);}
 .acompanhantes-lista .crianca-tag{color:var(--gold-light); font-size:.72rem;}
+
+.btn-excluir{
+  border:1px solid #c0395f; background:transparent; color:#e88;
+  padding:6px 14px; border-radius:8px; font-weight:700; font-size:.78rem; cursor:pointer; white-space:nowrap;
+}
+.btn-excluir:hover{background:rgba(200,60,60,0.15);}

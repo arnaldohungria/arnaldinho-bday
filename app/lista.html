@@ -37,10 +37,10 @@
       <div style="overflow-x:auto;">
         <table class="admin-table" id="tabela-confirmacoes">
           <thead>
-            <tr><th>Convidado</th><th>Acompanhantes</th><th>Pessoas</th><th>Valor</th><th>Status</th><th>Confirmado em</th></tr>
+            <tr><th>Convidado</th><th>Acompanhantes</th><th>Pessoas</th><th>Valor</th><th>Status</th><th>Confirmado em</th><th></th></tr>
           </thead>
           <tbody>
-            <tr><td colspan="6">Carregando...</td></tr>
+            <tr><td colspan="7">Carregando...</td></tr>
           </tbody>
         </table>
       </div>
@@ -94,7 +94,7 @@ const STATUS_LABEL = { pendente: "Pendente", pago: "Pago" };
 function iniciarLista() {
   db.collection("confirmacoes").orderBy("criadoEm", "desc").onSnapshot((snap) => {
     if (snap.empty) {
-      tabelaConfirmacoes.innerHTML = "<tr><td colspan='6'>Ninguém confirmou ainda.</td></tr>";
+      tabelaConfirmacoes.innerHTML = "<tr><td colspan='7'>Ninguém confirmou ainda.</td></tr>";
       atualizarResumo([]);
       return;
     }
@@ -146,12 +146,25 @@ function iniciarLista() {
       const tdCriado = document.createElement("td");
       tdCriado.textContent = c.criadoEm ? formatarDataHora(c.criadoEm.toDate()) : "-";
 
-      tr.append(tdNome, tdAcompanhantes, tdPessoas, tdValor, tdStatus, tdCriado);
+      const tdAcoes = document.createElement("td");
+      const btnExcluir = document.createElement("button");
+      btnExcluir.type = "button";
+      btnExcluir.className = "btn-excluir";
+      btnExcluir.textContent = "Excluir";
+      btnExcluir.addEventListener("click", () => excluirConfirmacao(doc.id, c.nomeConvidado));
+      tdAcoes.appendChild(btnExcluir);
+
+      tr.append(tdNome, tdAcompanhantes, tdPessoas, tdValor, tdStatus, tdCriado, tdAcoes);
       tabelaConfirmacoes.appendChild(tr);
     });
 
     atualizarResumo(confirmacoes);
   });
+}
+
+async function excluirConfirmacao(id, nome) {
+  if (!confirm("Excluir a confirmação de " + nome + "? Essa ação não pode ser desfeita.")) return;
+  await db.collection("confirmacoes").doc(id).delete();
 }
 
 function atualizarResumo(confirmacoes) {
