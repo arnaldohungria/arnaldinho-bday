@@ -18,7 +18,7 @@ async function criarPagamentoPix(env, { referenciaId, valor, descricao }) {
     })
   });
 
-  if (!resp.ok) throw new Error("Falha ao criar pagamento Pix no Mercado Pago: " + (await resp.text()));
+  if (!resp.ok) throw new Error("Falha ao criar pagamento Pix no Mercado Pago (HTTP " + resp.status + " " + resp.statusText + "): " + (await resp.text()));
 
   const pagamento = await resp.json();
   const transactionData = pagamento.point_of_interaction?.transaction_data || {};
