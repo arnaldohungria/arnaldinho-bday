@@ -26,7 +26,7 @@ async function handleCriarPix(request, env) {
   }
 
   const body = await request.json();
-  const { confirmacaoId, valor, descricao } = body;
+  const { confirmacaoId, valor, descricao, deviceId } = body;
 
   if (!confirmacaoId || !valor || valor <= 0 || !descricao) {
     return json({ erro: "Campos obrigatórios: confirmacaoId, valor, descricao." }, 400);
@@ -36,7 +36,7 @@ async function handleCriarPix(request, env) {
   if (!confirmacao) return json({ erro: "Confirmação não encontrada." }, 404);
   if (confirmacao.status !== "pendente") return json({ erro: "Confirmação já não está mais pendente." }, 409);
 
-  const pagamento = await criarPagamentoPix(env, { referenciaId: confirmacaoId, valor, descricao });
+  const pagamento = await criarPagamentoPix(env, { referenciaId: confirmacaoId, valor, descricao, deviceId });
 
   await patchDocument(env, "confirmacoes/" + confirmacaoId, {
     pixCopiaECola: pagamento.pixCopiaECola,

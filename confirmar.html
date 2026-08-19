@@ -59,6 +59,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="app/firebase-init.js"></script>
+<!-- Gera window.MP_DEVICE_SESSION_ID, exigido pelo antifraude do Mercado Pago pra aprovar o Pix. -->
+<script src="https://www.mercadopago.com/v2/security.js" view="checkout"></script>
 <script>
 const WORKER_URL = "https://arnaldinho-bday.academiaplus.workers.dev";
 const PRECO_PESSOA = 15;
@@ -180,7 +182,8 @@ async function gerarEAcompanharPix(confirmacaoRef, valorTotal, nomeConvidado) {
       body: JSON.stringify({
         confirmacaoId: confirmacaoRef.id,
         valor: valorTotal,
-        descricao: "Aniversário Arnaldo - " + nomeConvidado
+        descricao: "Aniversário Arnaldo - " + nomeConvidado,
+        deviceId: window.MP_DEVICE_SESSION_ID
       })
     });
     resposta = await r.json();
